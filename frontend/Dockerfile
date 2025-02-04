@@ -2,9 +2,6 @@ FROM node:16-alpine
 
 WORKDIR /app
 
-# Add the host entry for hCaptcha to work
-RUN echo "127.0.0.1 faucet.local" >> /etc/hosts
-
 COPY package*.json ./
 RUN npm install
 
@@ -12,9 +9,10 @@ COPY . .
 
 EXPOSE 3000
 
-# Set host and disable host check for development
-ENV HOST=0.0.0.0
+# Development environment variables
+ENV CI=true
 ENV WDS_SOCKET_PORT=0
-ENV DANGEROUSLY_DISABLE_HOST_CHECK=true
+ENV NODE_ENV=development
+ENV REACT_APP_BACKEND_URL=http://localhost:29000/api
 
 CMD ["npm", "start"]

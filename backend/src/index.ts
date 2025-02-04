@@ -81,5 +81,8 @@ app.post('/api/claim', async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
+  console.log('Starting server...');
+  console.log('RPC URL:', process.env.RPC_URL);
+  console.log('Private key length:', process.env.PRIVATE_KEY?.length);
   console.log(`Server running on port ${PORT}`);
 });
