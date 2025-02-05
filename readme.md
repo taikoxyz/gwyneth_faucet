@@ -7,6 +7,7 @@ A simple Ethereum faucet application with hCaptcha verification, built with Reac
 - Node.js (v16 or higher)
 - Docker and Docker Compose
 - A local Ethereum node running on port 32002
+- Ethereum address mapped to `PRIVATE_KEY` is seeded with ETH 
 - Git
 
 ## Quick Start
