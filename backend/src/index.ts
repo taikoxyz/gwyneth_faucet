@@ -1,4 +1,3 @@
-// src/index.ts
 import express from 'express';
 import cors from 'cors';
 import { ethers } from 'ethers';
@@ -11,12 +10,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize provider and wallet for local network
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || 'http://localhost:32002');
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+// Chain configurations
+const chains = [
+  { rpcUrl: process.env.RPC_URL || 'http://host.docker.internal:32002', name: 'Gwnyeth-L1' },
+  { rpcUrl: 'http://host.docker.internal:32005', name: 'Gwnyeth-L2A' },
+  { rpcUrl: 'http://host.docker.internal:32006', name: 'Gwnyeth-L2B' }
+];
 
-// Store recent claims to prevent abuse
-const recentClaims = new Map<string, number>();
+// Initialize providers and wallets for all chains
+const chainWallets = chains.map(chain => {
+  const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+  return {
+    wallet: new ethers.Wallet(process.env.PRIVATE_KEY!, provider),
+    name: chain.name,
+    rpcUrl: chain.rpcUrl
+  };
+});
+
+// Store recent claims to prevent abuse (per chain)
+const recentClaims = new Map<string, Map<string, number>>();
 const CLAIM_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 async function verifyCaptcha(token: string): Promise<boolean> {
@@ -35,6 +47,19 @@ async function verifyCaptcha(token: string): Promise<boolean> {
   }
 }
 
+async function sendEthOnChain(chainWallet: typeof chainWallets[0], address: string) {
+  try {
+    const tx = await chainWallet.wallet.sendTransaction({
+      to: address,
+      value: ethers.parseEther('0.1')
+    });
+    return { success: true, txHash: tx.hash, chain: chainWallet.name };
+  } catch (error: any) {
+    console.error(`Failed to send ETH on ${chainWallet.name}:`, error);
+    return { success: false, error: error.message, chain: chainWallet.name };
+  }
+}
+
 app.post('/api/claim', async (req, res) => {
   try {
     const { address, captchaToken } = req.body;
@@ -50,39 +75,60 @@ app.post('/api/claim', async (req, res) => {
       return res.status(400).json({ message: 'Invalid captcha' });
     }
 
-    // Check for recent claims
-    const lastClaim = recentClaims.get(address);
-    if (lastClaim && Date.now() - lastClaim < CLAIM_TIMEOUT) {
-      return res.status(400).json({ 
-        message: 'Please wait 24 hours between claims' 
+    // Check for recent claims on any chain
+    const now = Date.now();
+    for (const chainWallet of chainWallets) {
+      const chainClaims = recentClaims.get(chainWallet.name) || new Map<string, number>();
+      const lastClaim = chainClaims.get(address);
+      if (lastClaim && now - lastClaim < CLAIM_TIMEOUT) {
+        return res.status(400).json({
+          message: `Please wait 24 hours between claims on ${chainWallet.name}`
+        });
+      }
+    }
+
+    // Send ETH on all chains
+    const results = await Promise.all(
+      chainWallets.map(chainWallet => sendEthOnChain(chainWallet, address))
+    );
+
+    // Update recent claims for successful transactions
+    results.forEach((result, index) => {
+      if (result.success) {
+        const chainName = chainWallets[index].name;
+        const chainClaims = recentClaims.get(chainName) || new Map<string, number>();
+        chainClaims.set(address, now);
+        recentClaims.set(chainName, chainClaims);
+      }
+    });
+
+    // Prepare response
+    const successfulTxs = results.filter(r => r.success);
+    const failedTxs = results.filter(r => !r.success);
+
+    if (successfulTxs.length === 0) {
+      return res.status(500).json({
+        message: 'Failed to send ETH on all chains',
+        details: failedTxs
       });
     }
 
-    // Send ETH
-    const tx = await wallet.sendTransaction({
-      to: address,
-      value: ethers.parseEther('0.1')
-    });
-
-    // Update recent claims
-    recentClaims.set(address, Date.now());
-
     res.json({
       message: 'Successfully sent ETH',
-      txHash: tx.hash
+      successful: successfulTxs,
+      failed: failedTxs
     });
+
   } catch (error: any) {
     console.error('Claim failed:', error);
-    res.status(500).json({ 
-      message: error.message || 'Failed to process claim' 
+    res.status(500).json({
+      message: error.message || 'Failed to process claim'
     });
   }
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log('Starting server...');
-  console.log('RPC URL:', process.env.RPC_URL);
-  console.log('Private key length:', process.env.PRIVATE_KEY?.length);
   console.log(`Server running on port ${PORT}`);
+  console.log('Connected to chains:', chains.map(c => c.name).join(', '));
 });

@@ -2,13 +2,30 @@ import React, { useState } from 'react';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { ethers } from 'ethers';
 
+// Define types for transaction results
+interface SuccessfulTx {
+  chain: string;
+  txHash: string;
+}
+
+interface FailedTx {
+  chain: string;
+  error: string;
+}
+
 function App() {
   const [address, setAddress] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [successfulTxs, setSuccessfulTxs] = useState<SuccessfulTx[]>([]);
+
+  const chainConfigs = [
+    { chainId: '0x2710A', rpcUrl: 'http://localhost:32002' },
+    { chainId: '0x28C62', rpcUrl: 'http://localhost:32005' },
+    { chainId: '0x28C63', rpcUrl: 'http://localhost:32006' }
+  ];
 
   const connectWallet = async () => {
     try {
@@ -17,26 +34,29 @@ function App() {
           method: 'eth_requestAccounts'
         });
 
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x2710A' }],
-          });
-        } catch (switchError: any) {
-          if (switchError.code === 4902) {
+        // Add all three networks
+        for (const config of chainConfigs) {
+          try {
             await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x2710A',
-                chainName: 'Local Network',
-                nativeCurrency: {
-                  name: 'ETH',
-                  symbol: 'ETH',
-                  decimals: 18
-                },
-                rpcUrls: ['http://127.0.0.1:32002'],
-              }],
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: config.chainId }],
             });
+          } catch (switchError: any) {
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: config.chainId,
+                  chainName: `Local Network ${config.chainId}`,
+                  nativeCurrency: {
+                    name: 'ETH',
+                    symbol: 'ETH',
+                    decimals: 18
+                  },
+                  rpcUrls: [config.rpcUrl],
+                }],
+              });
+            }
           }
         }
 
@@ -59,7 +79,7 @@ function App() {
     
     setLoading(true);
     setError(null);
-    setSuccess(null);
+    setSuccessfulTxs([]);
 
     try {
       const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/claim`, {
@@ -79,7 +99,17 @@ function App() {
         throw new Error(data.message || 'Failed to claim ETH');
       }
 
-      setSuccess(`Successfully sent ETH! TX Hash: ${data.txHash}`);
+      // Handle successful and failed transactions
+      if (data.successful && data.successful.length > 0) {
+        setSuccessfulTxs(data.successful);
+      }
+
+      if (data.failed && data.failed.length > 0) {
+        const failureMessages = data.failed.map((tx: FailedTx) => 
+          `${tx.chain}: ${tx.error}`
+        );
+        setError(`Failed on some chains:\n${failureMessages.join('\n')}`);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to process claim');
     } finally {
@@ -94,7 +124,7 @@ function App() {
           <div className="max-w-md mx-auto">
             <div className="divide-y divide-gray-200">
               <div className="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
-                <h1 className="text-2xl font-bold mb-8 text-center">ETH Faucet</h1>
+                <h1 className="text-2xl font-bold mb-8 text-center">Multi-Chain ETH Faucet</h1>
                 
                 {!isConnected ? (
                   <button
@@ -123,17 +153,24 @@ function App() {
                           : 'bg-green-500 hover:bg-green-600 text-white'
                       }`}
                     >
-                      {loading ? 'Claiming...' : 'Claim 0.1 ETH'}
+                      {loading ? 'Claiming...' : 'Claim 0.1 ETH on All Chains'}
                     </button>
                   </div>
                 )}
                 
                 {error && (
-                  <div className="text-red-500 text-sm mt-4">{error}</div>
+                  <div className="text-red-500 text-sm mt-4 whitespace-pre-line">{error}</div>
                 )}
                 
-                {success && (
-                  <div className="text-green-500 text-sm mt-4">{success}</div>
+                {successfulTxs.length > 0 && (
+                  <div className="text-green-500 text-sm mt-4">
+                    {successfulTxs.map((tx, index) => (
+                      <div key={index} className="mb-2">
+                        Successfully sent ETH on {tx.chain}!<br />
+                        TX Hash: {tx.txHash}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
