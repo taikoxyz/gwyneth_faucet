@@ -51,7 +51,7 @@ async function sendEthOnChain(chainWallet: typeof chainWallets[0], address: stri
   try {
     const tx = await chainWallet.wallet.sendTransaction({
       to: address,
-      value: ethers.parseEther('0.1')
+      value: ethers.parseEther('1.0')
     });
     return { success: true, txHash: tx.hash, chain: chainWallet.name };
   } catch (error: any) {
