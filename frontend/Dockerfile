@@ -13,6 +13,6 @@ EXPOSE 3000
 ENV CI=true
 ENV WDS_SOCKET_PORT=0
 ENV NODE_ENV=development
-ENV REACT_APP_BACKEND_URL=http://localhost:29000/api
+ENV REACT_APP_BACKEND_URL=https://faucetbackend.gwyneth.xyz/api
 
 CMD ["npm", "start"]

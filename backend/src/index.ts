@@ -12,9 +12,9 @@ app.use(express.json());
 
 // Chain configurations
 const chains = [
-  { rpcUrl: process.env.RPC_URL || 'http://host.docker.internal:32002', name: 'Gwnyeth-L1' },
-  { rpcUrl: 'http://host.docker.internal:32005', name: 'Gwnyeth-L2A' },
-  { rpcUrl: 'http://host.docker.internal:32006', name: 'Gwnyeth-L2B' }
+  { rpcUrl: process.env.RPC_URL || 'https://l1.rpc.gwyneth.xyz', name: 'Gwnyeth-L1' },
+  { rpcUrl: 'https://l2a.rpc.gwyneth.xyz', name: 'Gwnyeth-L2A' },
+  { rpcUrl: 'https://l2b.rpc.gwyneth.xyz', name: 'Gwnyeth-L2B' }
 ];
 
 // Initialize providers and wallets for all chains
@@ -51,7 +51,7 @@ async function sendEthOnChain(chainWallet: typeof chainWallets[0], address: stri
   try {
     const tx = await chainWallet.wallet.sendTransaction({
       to: address,
-      value: ethers.parseEther('0.1')
+      value: ethers.parseEther('1.0')
     });
     return { success: true, txHash: tx.hash, chain: chainWallet.name };
   } catch (error: any) {

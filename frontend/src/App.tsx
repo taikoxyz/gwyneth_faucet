@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { ethers } from 'ethers';
 
@@ -22,50 +22,96 @@ function App() {
   const [successfulTxs, setSuccessfulTxs] = useState<SuccessfulTx[]>([]);
 
   const chainConfigs = [
-    { chainId: '0x2710A', rpcUrl: 'http://localhost:32002' },
-    { chainId: '0x28C62', rpcUrl: 'http://localhost:32005' },
-    { chainId: '0x28C63', rpcUrl: 'http://localhost:32006' }
+    { chainId: '0x2710A', rpcUrl: 'https://l1.rpc.gwyneth.xyz' },
+    { chainId: '0x28C62', rpcUrl: 'https://l2a.rpc.gwyneth.xyz' },
+    { chainId: '0x28C63', rpcUrl: 'https://l2b.rpc.gwyneth.xyz' }
   ];
+
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined') {
+      // Handle account changes
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setAddress(accounts[0]);
+          setIsConnected(true);
+        } else {
+          setAddress('');
+          setIsConnected(false);
+        }
+      });
+
+      // Handle chain changes
+      window.ethereum.on('chainChanged', (_chainId: string) => {
+        window.location.reload();
+      });
+
+      // Handle disconnect
+      window.ethereum.on('disconnect', () => {
+        setAddress('');
+        setIsConnected(false);
+      });
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', () => {});
+        window.ethereum.removeListener('chainChanged', () => {});
+        window.ethereum.removeListener('disconnect', () => {});
+      }
+    };
+  }, []);
 
   const connectWallet = async () => {
     try {
       if (typeof window.ethereum !== 'undefined') {
+        // First connect the wallet and get accounts
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts'
         });
-
-        // Add all three networks
+        
+        // Set address and connected state immediately after getting accounts
+        setAddress(accounts[0]);
+        setIsConnected(true);
+  
+        // Then attempt to add networks one by one
         for (const config of chainConfigs) {
           try {
+            console.log(`Attempting to switch to chain ${config.chainId}`);
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
               params: [{ chainId: config.chainId }],
             });
           } catch (switchError: any) {
+            // This error code indicates that the chain has not been added to MetaMask
             if (switchError.code === 4902) {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: config.chainId,
-                  chainName: `Local Network ${config.chainId}`,
-                  nativeCurrency: {
-                    name: 'ETH',
-                    symbol: 'ETH',
-                    decimals: 18
-                  },
-                  rpcUrls: [config.rpcUrl],
-                }],
-              });
+              try {
+                console.log(`Adding chain ${config.chainId}`);
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: config.chainId,
+                    chainName: `Gwyneth ${config.chainId}`,  // Updated chain name
+                    nativeCurrency: {
+                      name: 'ETH',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: [config.rpcUrl],
+                  }],
+                });
+              } catch (addError) {
+                console.error(`Error adding chain ${config.chainId}:`, addError);
+              }
+            } else {
+              console.error(`Error switching to chain ${config.chainId}:`, switchError);
             }
           }
         }
-
-        setAddress(accounts[0]);
-        setIsConnected(true);
       } else {
         setError('Please install MetaMask!');
       }
     } catch (err: any) {
+      console.error('Wallet connection error:', err);
       setError(err.message || 'Failed to connect wallet');
     }
   };
@@ -119,12 +165,12 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
-      <div className="relative py-3 sm:max-w-xl sm:mx-auto">
-        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
-          <div className="max-w-md mx-auto">
+      <div className="relative py-3 sm:max-w-2xl sm:mx-auto w-full px-4">
+        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-16">
+          <div className="max-w-full mx-auto">
             <div className="divide-y divide-gray-200">
               <div className="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
-                <h1 className="text-2xl font-bold mb-8 text-center">Multi-Chain ETH Faucet</h1>
+                <h1 className="text-2xl font-bold mb-8 text-center">Gwyneth multi-chain ETH faucet</h1>
                 
                 {!isConnected ? (
                   <button
@@ -135,7 +181,7 @@ function App() {
                   </button>
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-sm">Connected: {address}</p>
+                    <p className="text-sm break-all">Connected: {address}</p>
                     
                     <div className="flex justify-center">
                       <HCaptcha
@@ -153,21 +199,24 @@ function App() {
                           : 'bg-green-500 hover:bg-green-600 text-white'
                       }`}
                     >
-                      {loading ? 'Claiming...' : 'Claim 0.1 ETH on All Chains'}
+                      {loading ? 'Claiming...' : 'Claim 1 ETH on All Chains'}
                     </button>
                   </div>
                 )}
                 
                 {error && (
-                  <div className="text-red-500 text-sm mt-4 whitespace-pre-line">{error}</div>
+                  <div className="text-red-500 text-sm mt-4 whitespace-pre-line break-all">{error}</div>
                 )}
                 
                 {successfulTxs.length > 0 && (
-                  <div className="text-green-500 text-sm mt-4">
+                  <div className="text-green-500 text-sm mt-4 space-y-4">
                     {successfulTxs.map((tx, index) => (
-                      <div key={index} className="mb-2">
-                        Successfully sent ETH on {tx.chain}!<br />
-                        TX Hash: {tx.txHash}
+                      <div key={index} className="break-all">
+                        <div className="font-semibold">Successfully sent ETH on {tx.chain}!</div>
+                        <div className="text-xs mt-1">
+                          TX Hash: <br/>
+                          {tx.txHash}
+                        </div>
                       </div>
                     ))}
                   </div>
