@@ -109,7 +109,7 @@ The application expects an Ethereum node running locally with the following conf
 
 ## Notes
 
-- The faucet sends 0.1 ETH per request
+- The faucet sends 1 ETH per request
 - There's a 24-hour cooldown period between claims for each address
 - All transactions are processed through the local Ethereum node
 - hCaptcha is used to prevent automated claims
